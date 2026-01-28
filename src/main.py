@@ -4,7 +4,7 @@ import time
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
-from avatar import AvatarWidget
+from avatar import AvatarWidget, configure_opengl_format
 from brain import Brain
 from audio_engine import AudioEngine
 
@@ -65,9 +65,12 @@ class AssistantWorker(QThread):
         self.wait()
 
 def main():
+    # Configure OpenGL format before creating QApplication
+    configure_opengl_format()
+
     app = QApplication(sys.argv)
-    
-    # Create Avatar Window
+
+    # Create 3D Avatar Window
     avatar = AvatarWidget()
     avatar.show()
     
