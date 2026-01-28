@@ -1,6 +1,8 @@
 PyQt6
 PyOpenGL
 PyOpenGL-accelerate
+pygltflib
+Pillow
 
 torch
 transformers
