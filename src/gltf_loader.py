@@ -373,11 +373,20 @@ class GLTFLoader:
             node.scale = Vec3(s[0], s[1], s[2])
 
         if 'matrix' in node_data:
-            # Decompose matrix (simplified - assumes no shear)
+            # Decompose matrix
             m = node_data['matrix']
-            mat = np.array(m).reshape(4, 4).T  # glTF uses column-major
-            node.translation = Vec3(mat[0, 3], mat[1, 3], mat[2, 3])
-            # Scale and rotation would need proper decomposition
+            # glTF uses column-major, but our Mat4 constructor expects row-major input
+            # if we pass the array as is.
+            # np.reshape fills row by row.
+            # To get column-major reconstruction, we reshape then transpose.
+            # Mat4 wraps the numpy array, which is now in correct layout (M[row, col])
+            mat_data = np.array(m).reshape(4, 4).T
+            mat = Mat4(mat_data)
+
+            t, r, s = mat.decompose()
+            node.translation = t
+            node.rotation = r
+            node.scale = s
 
         return node
 

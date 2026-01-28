@@ -189,6 +189,39 @@ class Quaternion:
         )
 
     @staticmethod
+    def from_matrix(matrix: np.ndarray) -> 'Quaternion':
+        """Create quaternion from rotation matrix."""
+        m = matrix
+        tr = m[0, 0] + m[1, 1] + m[2, 2]
+
+        if tr > 0:
+            s = math.sqrt(tr + 1.0) * 2
+            w = 0.25 * s
+            x = (m[2, 1] - m[1, 2]) / s
+            y = (m[0, 2] - m[2, 0]) / s
+            z = (m[1, 0] - m[0, 1]) / s
+        elif (m[0, 0] > m[1, 1]) and (m[0, 0] > m[2, 2]):
+            s = math.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2]) * 2
+            w = (m[2, 1] - m[1, 2]) / s
+            x = 0.25 * s
+            y = (m[0, 1] + m[1, 0]) / s
+            z = (m[0, 2] + m[2, 0]) / s
+        elif m[1, 1] > m[2, 2]:
+            s = math.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2]) * 2
+            w = (m[0, 2] - m[2, 0]) / s
+            x = (m[0, 1] + m[1, 0]) / s
+            y = 0.25 * s
+            z = (m[1, 2] + m[2, 1]) / s
+        else:
+            s = math.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1]) * 2
+            w = (m[1, 0] - m[0, 1]) / s
+            x = (m[0, 2] + m[2, 0]) / s
+            y = (m[1, 2] + m[2, 1]) / s
+            z = 0.25 * s
+
+        return Quaternion(w, x, y, z)
+
+    @staticmethod
     def slerp(q1: 'Quaternion', q2: 'Quaternion', t: float) -> 'Quaternion':
         """Spherical linear interpolation between two quaternions."""
         dot = q1.w * q2.w + q1.x * q2.x + q1.y * q2.y + q1.z * q2.z
@@ -267,6 +300,54 @@ class Mat4:
     def transposed(self) -> 'Mat4':
         """Return the transpose of this matrix."""
         return Mat4(self.data.T)
+
+    def decompose(self) -> Tuple[Vec3, Quaternion, Vec3]:
+        """Decompose matrix into translation, rotation, and scale."""
+        data = self.data
+
+        # Translation
+        translation = Vec3(data[0, 3], data[1, 3], data[2, 3])
+
+        # Scale
+        c0 = Vec3(data[0, 0], data[1, 0], data[2, 0])
+        c1 = Vec3(data[0, 1], data[1, 1], data[2, 1])
+        c2 = Vec3(data[0, 2], data[1, 2], data[2, 2])
+
+        sx = c0.length()
+        sy = c1.length()
+        sz = c2.length()
+
+        # Handle negative scale (reflection)
+        det = np.linalg.det(data[:3, :3])
+        if det < 0:
+            sx = -sx
+
+        scale = Vec3(sx, sy, sz)
+
+        # Rotation
+        if abs(sx) < 1e-6 or abs(sy) < 1e-6 or abs(sz) < 1e-6:
+            rotation = Quaternion.identity()
+        else:
+            inv_sx = 1.0 / sx
+            inv_sy = 1.0 / sy
+            inv_sz = 1.0 / sz
+
+            r_mat = np.eye(4, dtype=np.float32)
+            r_mat[0, 0] = data[0, 0] * inv_sx
+            r_mat[1, 0] = data[1, 0] * inv_sx
+            r_mat[2, 0] = data[2, 0] * inv_sx
+
+            r_mat[0, 1] = data[0, 1] * inv_sy
+            r_mat[1, 1] = data[1, 1] * inv_sy
+            r_mat[2, 1] = data[2, 1] * inv_sy
+
+            r_mat[0, 2] = data[0, 2] * inv_sz
+            r_mat[1, 2] = data[1, 2] * inv_sz
+            r_mat[2, 2] = data[2, 2] * inv_sz
+
+            rotation = Quaternion.from_matrix(r_mat)
+
+        return translation, rotation, scale
 
     @staticmethod
     def identity() -> 'Mat4':
