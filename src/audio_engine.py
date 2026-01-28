@@ -141,33 +141,103 @@ class AudioEngine:
         self.tts_speed = max(0.5, min(2.0, speed))
         logger.info(f"Speed set to: {self.tts_speed}")
 
-    def listen_and_transcribe(self, duration=5):
+    def listen_and_transcribe(self, silence_timeout=10.0, max_duration=120.0, status_callback=None):
         """
-        Records audio for a fixed duration and transcribes it.
-        Uses faster-whisper for 4x faster transcription.
+        Records audio using voice activity detection (VAD).
+        Stops recording after silence_timeout seconds of silence.
+
+        Args:
+            silence_timeout: Seconds of silence before stopping (default 10)
+            max_duration: Maximum recording duration in seconds (default 120)
+            status_callback: Optional callback for status updates (receives string)
+
+        Returns:
+            Transcribed text string
         """
         fs = 16000  # 16kHz for Whisper
-        logger.info("Listening...")
+        chunk_duration = 0.1  # 100ms chunks for VAD
+        chunk_samples = int(fs * chunk_duration)
+
+        # VAD parameters
+        energy_threshold = 0.01  # Minimum RMS energy to consider as speech
+        speech_detected = False
+        silence_start = None
+        recording_start = time.time()
+
+        audio_chunks = []
+        self.is_listening = True
+
+        logger.info("Listening with VAD... (speak now)")
+        if status_callback:
+            status_callback("Listening... (speak now)")
 
         try:
-            recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32')
-            sd.wait()
+            with sd.InputStream(samplerate=fs, channels=1, dtype='float32') as stream:
+                while self.is_listening:
+                    # Check max duration
+                    elapsed = time.time() - recording_start
+                    if elapsed > max_duration:
+                        logger.info("Max recording duration reached")
+                        break
+
+                    # Read audio chunk
+                    chunk, overflowed = stream.read(chunk_samples)
+                    audio_chunks.append(chunk.copy())
+
+                    # Calculate RMS energy
+                    rms = np.sqrt(np.mean(chunk ** 2))
+
+                    if rms > energy_threshold:
+                        # Speech detected
+                        if not speech_detected:
+                            logger.info("Speech started")
+                            if status_callback:
+                                status_callback("Hearing you...")
+                        speech_detected = True
+                        silence_start = None
+                    else:
+                        # Silence
+                        if speech_detected:
+                            if silence_start is None:
+                                silence_start = time.time()
+                            else:
+                                silence_duration = time.time() - silence_start
+                                remaining = silence_timeout - silence_duration
+                                if remaining <= 3 and remaining > 0:
+                                    if status_callback:
+                                        status_callback(f"Silence detected... ({int(remaining)}s)")
+                                if silence_duration >= silence_timeout:
+                                    logger.info(f"Silence timeout ({silence_timeout}s) reached")
+                                    break
+
+            self.is_listening = False
+
+            if not audio_chunks:
+                return ""
+
+            # Concatenate all audio
+            audio_data = np.concatenate(audio_chunks).squeeze()
+
+            # Check if we actually got any speech
+            if not speech_detected:
+                logger.info("No speech detected")
+                return ""
+
             logger.info("Processing audio...")
+            if status_callback:
+                status_callback("Processing speech...")
 
-            audio_data = recording.squeeze()
-
+            # Transcribe
             if self.use_faster_whisper:
-                # faster-whisper expects numpy array or file path
                 segments, info = self.stt_model.transcribe(
                     audio_data,
                     beam_size=5,
                     language="en",
-                    vad_filter=True,  # Filter out non-speech
+                    vad_filter=True,
                     vad_parameters=dict(min_silence_duration_ms=500)
                 )
                 text = "".join([segment.text for segment in segments]).strip()
             else:
-                # Fallback to transformers pipeline
                 result = self.stt_pipe(audio_data)
                 text = result["text"].strip()
 
@@ -176,6 +246,12 @@ class AudioEngine:
         except Exception as e:
             logger.error(f"Error in transcription: {e}")
             return ""
+        finally:
+            self.is_listening = False
+
+    def stop_listening(self):
+        """Stop the current listening session."""
+        self.is_listening = False
 
     def speak(self, text, avatar_callback=None):
         """

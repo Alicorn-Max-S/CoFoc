@@ -186,6 +186,110 @@ class ExternalAvatarRenderer:
         # This would require blend shapes which glTF models may have
         # For now, we can at least adjust the jaw differently for different sounds
 
+        # --- Hand/Arm Gesture Animations ---
+        self._apply_hand_gestures(t, delta_time)
+
+    def _apply_hand_gestures(self, t: float, delta_time: float) -> None:
+        """Apply procedural hand and arm gestures, especially during speaking."""
+        if not self.skeleton:
+            return
+
+        import random
+
+        # Subtle idle hand movement (always active)
+        idle_sway = math.sin(t * 0.7) * 0.02
+
+        # Speaking gestures - more animated when talking
+        gesture_intensity = 0.0
+        if self.is_speaking:
+            # Vary gesture intensity over time for natural movement
+            gesture_intensity = (math.sin(t * 1.2) * 0.5 + 0.5) * 0.8
+
+        # --- Right Arm ---
+        right_upper_arm = (self.skeleton.get_bone("RightUpperArm") or
+                          self.skeleton.get_bone("RightArm") or
+                          self.skeleton.get_bone("mixamorig:RightArm"))
+        right_lower_arm = (self.skeleton.get_bone("RightForeArm") or
+                          self.skeleton.get_bone("RightLowerArm") or
+                          self.skeleton.get_bone("mixamorig:RightForeArm"))
+        right_hand = (self.skeleton.get_bone("RightHand") or
+                      self.skeleton.get_bone("mixamorig:RightHand"))
+
+        if right_upper_arm:
+            # Base pose: arm slightly away from body
+            base_rotation = -0.2  # Slight outward rotation
+            # Gesture: raise arm when speaking
+            gesture_raise = gesture_intensity * math.sin(t * 2.0) * 0.15
+            gesture_forward = gesture_intensity * math.sin(t * 1.5) * 0.1
+            right_upper_arm.local_transform.rotation = Quaternion.from_euler(
+                base_rotation + gesture_forward + idle_sway,
+                gesture_raise,
+                0
+            )
+
+        if right_lower_arm:
+            # Bend elbow slightly, more when gesturing
+            base_bend = 0.3
+            gesture_bend = gesture_intensity * (math.sin(t * 2.5) * 0.2 + 0.1)
+            right_lower_arm.local_transform.rotation = Quaternion.from_euler(
+                0, 0, base_bend + gesture_bend
+            )
+
+        if right_hand:
+            # Wrist rotation for emphasis
+            wrist_twist = idle_sway + gesture_intensity * math.sin(t * 3.0) * 0.1
+            right_hand.local_transform.rotation = Quaternion.from_euler(
+                wrist_twist, 0, 0
+            )
+
+        # --- Left Arm ---
+        left_upper_arm = (self.skeleton.get_bone("LeftUpperArm") or
+                         self.skeleton.get_bone("LeftArm") or
+                         self.skeleton.get_bone("mixamorig:LeftArm"))
+        left_lower_arm = (self.skeleton.get_bone("LeftForeArm") or
+                         self.skeleton.get_bone("LeftLowerArm") or
+                         self.skeleton.get_bone("mixamorig:LeftForeArm"))
+        left_hand = (self.skeleton.get_bone("LeftHand") or
+                     self.skeleton.get_bone("mixamorig:LeftHand"))
+
+        if left_upper_arm:
+            # Mirror of right arm with offset timing
+            base_rotation = 0.2  # Slight outward rotation (opposite direction)
+            gesture_raise = gesture_intensity * math.sin(t * 2.0 + 1.5) * 0.12
+            gesture_forward = gesture_intensity * math.sin(t * 1.5 + 0.8) * 0.08
+            left_upper_arm.local_transform.rotation = Quaternion.from_euler(
+                base_rotation + gesture_forward - idle_sway,
+                -gesture_raise,
+                0
+            )
+
+        if left_lower_arm:
+            base_bend = -0.3  # Opposite direction for left arm
+            gesture_bend = gesture_intensity * (math.sin(t * 2.5 + 1.0) * 0.15 + 0.05)
+            left_lower_arm.local_transform.rotation = Quaternion.from_euler(
+                0, 0, base_bend - gesture_bend
+            )
+
+        if left_hand:
+            wrist_twist = -idle_sway + gesture_intensity * math.sin(t * 3.0 + 1.5) * 0.08
+            left_hand.local_transform.rotation = Quaternion.from_euler(
+                wrist_twist, 0, 0
+            )
+
+        # --- Shoulder movement for more natural gestures ---
+        right_shoulder = (self.skeleton.get_bone("RightShoulder") or
+                         self.skeleton.get_bone("mixamorig:RightShoulder"))
+        left_shoulder = (self.skeleton.get_bone("LeftShoulder") or
+                        self.skeleton.get_bone("mixamorig:LeftShoulder"))
+
+        if right_shoulder and self.is_speaking:
+            shrug = gesture_intensity * math.sin(t * 1.8) * 0.03
+            right_shoulder.local_transform.rotation = Quaternion.from_euler(0, shrug, 0)
+
+        if left_shoulder and self.is_speaking:
+            shrug = gesture_intensity * math.sin(t * 1.8 + 0.5) * 0.03
+            left_shoulder.local_transform.rotation = Quaternion.from_euler(0, -shrug, 0)
+
     def get_bone_matrices(self) -> Optional[List[Mat4]]:
         """Get bone matrices for GPU skinning."""
         if self.skeleton:
@@ -215,10 +319,10 @@ class Avatar3DWidget(QOpenGLWidget):
         self.external_renderer: Optional[ExternalAvatarRenderer] = None
         self.fallback_avatar = None  # Will use procedural avatar if no model
 
-        # Camera settings
-        self.camera_distance = 1.8
-        self.camera_height = 1.0
-        self.camera_target = Vec3(0, 0.9, 0)
+        # Camera settings - adjusted for full-body view
+        self.camera_distance = 3.0  # Further back to see full body
+        self.camera_height = 0.8    # Lower to center on full body
+        self.camera_target = Vec3(0, 0.8, 0)  # Target chest/center of body
         self.camera_angle = 0.0
 
         # Lighting
@@ -427,11 +531,11 @@ class AvatarWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
 
         # Geometry - larger window for better avatar visibility
-        self.resize(350, 450)
+        self.resize(400, 700)  # Taller window for full-body avatar view
 
         # Position in bottom right corner
         screen = QApplication.primaryScreen().availableGeometry()
-        self.move(screen.width() - 370, screen.height() - 470)
+        self.move(screen.width() - 420, screen.height() - 720)
 
         # Create OpenGL widget
         self.gl_widget = Avatar3DWidget(self)

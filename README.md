@@ -4,10 +4,11 @@ CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a
 
 ## Features
 
-- **Transparent Overlay**: Avatar floats on your screen with no background, always visible in the corner
+- **Transparent Overlay**: Full-body avatar floats on your screen with no background
 - **Custom 3D Avatars**: Load high-quality GLB/glTF/VRM models from Ready Player Me, VRoid Hub, Mixamo, and more
-- **Real-time Animation**: Idle breathing, lip-sync during speech, blinking, and gesture animations
-- **Continuous Voice Interaction**: Press T to start, then just keep talking - no need to press again
+- **Natural Voice Detection**: Speak naturally - VAD detects when you're talking and when you stop
+- **Rich Animations**: Idle breathing, phoneme-based lip-sync, blinking, and expressive hand gestures during speech
+- **Continuous Conversation**: Press T to start, then just keep talking - no need to press again
 - **Local AI**: Uses Ollama for privacy-focused local LLM inference
 - **Context Management**: Automatic context reset after 30 seconds of silence
 - **High-Quality TTS**: Qwen3-TTS provides natural, expressive speech synthesis
@@ -61,13 +62,14 @@ CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a
 
 ## How It Works
 
-1. **Model Rendering**: The 3D avatar is rendered with a transparent background, floating on your screen
+1. **Model Rendering**: The full-body 3D avatar is rendered with a transparent background, floating on your screen
 2. **Start Conversation**: Press **T** once to begin the conversation
-3. **Speech-to-Text**: Your voice is transcribed using faster-whisper (Whisper large-v3-turbo)
-4. **LLM Response**: The transcribed text is sent to Ollama for a response
-5. **Text-to-Speech**: The response is spoken using Qwen3-TTS with phoneme-based lip-sync
-6. **Auto-Listen**: After speaking, the assistant automatically listens for your next message
-7. **Context Reset**: If you don't speak for 30 seconds, the conversation context resets and waits for T
+3. **Natural Speech Detection**: Speak naturally - the system detects when you're talking using voice activity detection (VAD)
+4. **Auto-Detect End of Speech**: When you stop talking for 10 seconds, your message is automatically sent
+5. **LLM Response**: The transcribed text is sent to Ollama for a response
+6. **Animated Response**: The response is spoken using Qwen3-TTS with phoneme-based lip-sync and hand gestures
+7. **Auto-Listen**: After speaking, the assistant automatically listens for your next message
+8. **Context Reset**: If there's no speech for 30 seconds total, the conversation context resets and waits for T
 
 ## Custom Avatars
 

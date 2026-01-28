@@ -67,16 +67,22 @@ class AssistantWorker(QThread):
                     self.last_interaction_time = time.time()
                     continue
 
-                # 1. Listen
-                self.signals.update_status.emit("Listening... (speak now)")
-                user_text = self.audio.listen_and_transcribe(duration=5)
+                # 1. Listen with VAD (stops after 10s of silence)
+                def status_callback(msg):
+                    self.signals.update_status.emit(msg)
+
+                user_text = self.audio.listen_and_transcribe(
+                    silence_timeout=10.0,
+                    max_duration=120.0,
+                    status_callback=status_callback
+                )
 
                 if not user_text:
-                    # Silence detected - check if we should keep listening or timeout
+                    # No speech detected - check if we should keep listening or timeout
                     elapsed = time.time() - self.last_interaction_time
                     remaining = INACTIVITY_TIMEOUT - elapsed
                     if remaining > 0:
-                        self.signals.update_status.emit(f"Heard silence. Listening... ({int(remaining)}s until timeout)")
+                        self.signals.update_status.emit(f"No speech detected. Listening... ({int(remaining)}s until timeout)")
                     continue
 
                 # Update last interaction time
@@ -161,8 +167,13 @@ def main():
         print("[System]:   R     - Toggle camera rotation")
         print("[System]:   C     - Toggle click-through mode")
         print("[System]:   Esc   - Quit")
-        print("[System]: After speaking, I'll keep listening automatically.")
-        print("[System]: Context resets after 30 seconds of silence.")
+        print("[System]: ")
+        print("[System]: How it works:")
+        print("[System]:   1. Press T to start")
+        print("[System]:   2. Speak naturally - I'll detect when you're talking")
+        print("[System]:   3. Stop talking for 10 seconds to send your message")
+        print("[System]:   4. I'll respond, then listen again automatically")
+        print("[System]:   5. 30 seconds of total silence resets the conversation")
 
         try:
             sys.exit(app.exec())
