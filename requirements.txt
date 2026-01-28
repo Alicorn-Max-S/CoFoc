@@ -1,0 +1,17 @@
+PyQt6
+
+
+torch
+transformers
+scipy
+sounddevice
+soundfile
+numpy
+ollama
+openai-whisper
+requests
+pillow
+huggingface_hub
+accelerate
+librosa
+termcolor
