@@ -27,9 +27,10 @@ class AssistantWorker(QThread):
         self.brain = None
         self.audio = None
 
-        # Push-to-talk state
+        # Conversation state
         self.talk_requested = threading.Event()
         self.last_interaction_time = time.time()
+        self.in_conversation = False  # True when actively conversing (auto-listen mode)
 
     def request_talk(self):
         """Called when user presses the talk key."""
@@ -40,32 +41,42 @@ class AssistantWorker(QThread):
         self.signals.update_status.emit("Initializing Brain (Ollama)...")
         self.brain = Brain()
 
-        self.signals.update_status.emit("Initializing Audio Engine (Whisper + TTS)...")
+        self.signals.update_status.emit("Initializing Audio Engine (Whisper + Qwen3-TTS)...")
         self.audio = AudioEngine()
 
-        self.signals.update_status.emit("Ready! Press T to talk.")
+        self.signals.update_status.emit("Ready! Press T to start talking.")
 
         while self.running:
             try:
-                # Wait for user to press talk key (with timeout to check for inactivity)
-                if not self.talk_requested.wait(timeout=1.0):
-                    # Check for inactivity timeout
-                    if time.time() - self.last_interaction_time > INACTIVITY_TIMEOUT:
-                        if self.brain.history:
-                            self.brain.reset_context()
-                            self.signals.update_status.emit("Context reset due to inactivity. Press T to talk.")
-                            self.last_interaction_time = time.time()
-                    continue
+                if not self.in_conversation:
+                    # Waiting for user to press T to start conversation
+                    if not self.talk_requested.wait(timeout=1.0):
+                        continue
+                    self.talk_requested.clear()
+                    self.in_conversation = True
+                    self.last_interaction_time = time.time()
 
-                # Clear the event for next time
-                self.talk_requested.clear()
+                # Check for inactivity timeout (30 seconds of silence = reset context)
+                if time.time() - self.last_interaction_time > INACTIVITY_TIMEOUT:
+                    if self.brain.history:
+                        self.brain.reset_context()
+                        self.signals.update_status.emit("Context reset due to inactivity. Press T to start a new conversation.")
+                    else:
+                        self.signals.update_status.emit("No activity. Press T to start talking.")
+                    self.in_conversation = False
+                    self.last_interaction_time = time.time()
+                    continue
 
                 # 1. Listen
                 self.signals.update_status.emit("Listening... (speak now)")
                 user_text = self.audio.listen_and_transcribe(duration=5)
 
                 if not user_text:
-                    self.signals.update_status.emit("Heard silence. Press T to talk.")
+                    # Silence detected - check if we should keep listening or timeout
+                    elapsed = time.time() - self.last_interaction_time
+                    remaining = INACTIVITY_TIMEOUT - elapsed
+                    if remaining > 0:
+                        self.signals.update_status.emit(f"Heard silence. Listening... ({int(remaining)}s until timeout)")
                     continue
 
                 # Update last interaction time
@@ -81,7 +92,6 @@ class AssistantWorker(QThread):
                 self.signals.update_status.emit("Speaking...")
 
                 # We need a callback to sync the avatar mouth
-                # Since we are in a thread, we use signals
                 def avatar_callback(is_speaking):
                     self.signals.set_speaking.emit(is_speaking)
 
@@ -89,11 +99,12 @@ class AssistantWorker(QThread):
 
                 # Update last interaction time after speaking
                 self.last_interaction_time = time.time()
-                self.signals.update_status.emit("Ready! Press T to talk.")
+                self.signals.update_status.emit("Listening... (speak now)")
 
             except Exception as e:
                 print(f"Error in loop: {e}")
                 self.signals.update_status.emit("Error occurred. Press T to try again.")
+                self.in_conversation = False
                 time.sleep(1)
 
     def stop(self):
@@ -146,11 +157,12 @@ def main():
         worker.start()
 
         print("[System]: Controls:")
-        print("[System]:   T     - Press to talk (push-to-talk)")
+        print("[System]:   T     - Press to start conversation")
         print("[System]:   R     - Toggle camera rotation")
         print("[System]:   C     - Toggle click-through mode")
         print("[System]:   Esc   - Quit")
-        print("[System]: Context resets after 30 seconds of inactivity.")
+        print("[System]: After speaking, I'll keep listening automatically.")
+        print("[System]: Context resets after 30 seconds of silence.")
 
         try:
             sys.exit(app.exec())

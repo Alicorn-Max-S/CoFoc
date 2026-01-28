@@ -22,6 +22,6 @@ termcolor
 # Fast STT - 4x faster than OpenAI Whisper
 faster-whisper
 
-# Fast TTS - 82M params, high quality
-kokoro>=0.9
-misaki[en]
+# Qwen3-TTS - High quality TTS with voice cloning
+# Install from: https://github.com/QwenLM/Qwen3-TTS
+qwen-tts

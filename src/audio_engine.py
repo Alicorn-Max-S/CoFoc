@@ -21,7 +21,7 @@ class AudioEngine:
     """
     High-performance audio engine using:
     - faster-whisper for STT (4x faster than OpenAI Whisper)
-    - Kokoro for TTS (82M params, fast, high quality)
+    - Qwen3-TTS for TTS (0.6B-1.7B params, high quality, voice cloning)
 
     Optimized for RTX 3090 with CUDA acceleration.
     """
@@ -33,7 +33,7 @@ class AudioEngine:
         # --- STT Setup (faster-whisper) ---
         self._init_stt()
 
-        # --- TTS Setup (Kokoro) ---
+        # --- TTS Setup (Qwen3-TTS) ---
         self._init_tts()
 
         self.audio_queue = queue.Queue()
@@ -77,38 +77,43 @@ class AudioEngine:
         logger.info("Using fallback: transformers whisper-base.en")
 
     def _init_tts(self):
-        """Initialize Kokoro for text-to-speech."""
-        logger.info("Loading Kokoro TTS...")
+        """Initialize Qwen3-TTS for text-to-speech."""
+        logger.info("Loading Qwen3-TTS...")
 
         try:
-            from kokoro import KPipeline
+            from qwen_tts import Qwen3TTSModel
 
-            # Initialize Kokoro with American English
-            # 'a' = American English, 'b' = British English
-            self.tts_pipeline = KPipeline(lang_code='a')
+            # Load Qwen3-TTS model (0.6B for faster inference, 1.7B for higher quality)
+            # Using CustomVoice variant for voice selection support
+            self.tts_model = Qwen3TTSModel.from_pretrained(
+                "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+                device_map=self.device,
+                dtype=torch.bfloat16 if self.device == "cuda" else torch.float32,
+            )
 
-            # Available voices: af_heart, af_bella, af_nicole, af_sarah, af_sky
-            # am_adam, am_michael (male voices)
-            self.tts_voice = 'af_heart'  # Default female voice, natural sounding
+            # Default voice settings
+            self.tts_voice = 'Vivian'  # Default voice
+            self.tts_language = 'English'
             self.tts_speed = 1.0
 
-            self.use_kokoro = True
-            self.tts_sample_rate = 24000  # Kokoro outputs 24kHz
-            logger.info(f"Successfully loaded Kokoro TTS (voice: {self.tts_voice})")
+            self.use_qwen_tts = True
+            self.tts_sample_rate = 24000  # Qwen3-TTS outputs 24kHz
+            logger.info(f"Successfully loaded Qwen3-TTS (voice: {self.tts_voice})")
 
         except ImportError:
-            logger.warning("Kokoro not installed, falling back to SpeechT5")
+            logger.warning("qwen-tts not installed. Install with: pip install qwen-tts")
+            logger.warning("Falling back to SpeechT5")
             self._init_fallback_tts()
         except Exception as e:
-            logger.warning(f"Could not load Kokoro: {e}")
+            logger.warning(f"Could not load Qwen3-TTS: {e}")
             self._init_fallback_tts()
 
     def _init_fallback_tts(self):
-        """Fallback to SpeechT5 if Kokoro unavailable."""
+        """Fallback to SpeechT5 if Qwen3-TTS unavailable."""
         from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
 
         self.processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
-        self.tts_model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(self.device)
+        self.fallback_tts_model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(self.device)
         self.vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(self.device)
 
         # Load speaker embedding
@@ -116,19 +121,18 @@ class AudioEngine:
         embeddings_dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
         self.speaker_embeddings = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0).to(self.device)
 
-        self.use_kokoro = False
+        self.use_qwen_tts = False
         self.tts_sample_rate = 16000
         logger.info("Using fallback: SpeechT5 TTS")
 
     def set_voice(self, voice: str):
         """
-        Set the TTS voice (only for Kokoro).
+        Set the TTS voice (only for Qwen3-TTS).
 
-        Available voices:
-        - Female: af_heart, af_bella, af_nicole, af_sarah, af_sky
-        - Male: am_adam, am_michael
+        Available voices vary by model. Common options include:
+        - Vivian, Emily, James, etc.
         """
-        if self.use_kokoro:
+        if self.use_qwen_tts:
             self.tts_voice = voice
             logger.info(f"Voice set to: {voice}")
 
@@ -175,7 +179,7 @@ class AudioEngine:
 
     def speak(self, text, avatar_callback=None):
         """
-        Converts text to speech using Kokoro and plays it with phoneme-based lip sync.
+        Converts text to speech using Qwen3-TTS and plays it with phoneme-based lip sync.
 
         Args:
             text: Text to speak
@@ -191,8 +195,8 @@ class AudioEngine:
         lip_sync = get_lip_sync_engine()
 
         try:
-            if self.use_kokoro:
-                self._speak_kokoro(text, lip_sync, avatar_callback)
+            if self.use_qwen_tts:
+                self._speak_qwen(text, lip_sync, avatar_callback)
             else:
                 self._speak_fallback(text, lip_sync, avatar_callback)
 
@@ -204,30 +208,30 @@ class AudioEngine:
                 avatar_callback(False)
             self.is_speaking = False
 
-    def _speak_kokoro(self, text, lip_sync, avatar_callback):
-        """Generate and play speech using Kokoro TTS."""
-        # Generate audio with Kokoro
-        # Kokoro returns a generator that yields (samples, sample_rate, phonemes)
-        audio_chunks = []
-        phoneme_data = []
+    def _speak_qwen(self, text, lip_sync, avatar_callback):
+        """Generate and play speech using Qwen3-TTS."""
+        import soundfile as sf
 
-        generator = self.tts_pipeline(
-            text,
-            voice=self.tts_voice,
-            speed=self.tts_speed
+        # Generate audio with Qwen3-TTS
+        wavs, sr = self.tts_model.generate_custom_voice(
+            text=text,
+            language=self.tts_language,
+            speaker=self.tts_voice,
         )
 
-        for samples, sample_rate, phonemes in generator:
-            audio_chunks.append(samples)
-            if phonemes:
-                phoneme_data.append(phonemes)
-
-        if not audio_chunks:
+        if wavs is None or len(wavs) == 0:
             logger.warning("No audio generated")
             return
 
-        # Concatenate all audio chunks
-        speech_np = np.concatenate(audio_chunks)
+        # Get the first waveform
+        speech_np = wavs[0] if isinstance(wavs, list) else wavs
+
+        # Ensure it's a numpy array
+        if hasattr(speech_np, 'cpu'):
+            speech_np = speech_np.cpu().numpy()
+
+        # Update sample rate from model output
+        self.tts_sample_rate = sr
 
         # Calculate duration
         audio_duration = len(speech_np) / self.tts_sample_rate
@@ -247,7 +251,7 @@ class AudioEngine:
     def _speak_fallback(self, text, lip_sync, avatar_callback):
         """Generate and play speech using SpeechT5 (fallback)."""
         inputs = self.processor(text=text, return_tensors="pt").to(self.device)
-        speech = self.tts_model.generate_speech(
+        speech = self.fallback_tts_model.generate_speech(
             inputs["input_ids"],
             self.speaker_embeddings,
             vocoder=self.vocoder

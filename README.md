@@ -1,15 +1,16 @@
 # CoFoc
 
-CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a local LLM (Ollama), and speaks back using Kokoro TTS, all while displaying a real-time animated 3D avatar floating on your screen with a transparent background.
+CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a local LLM (Ollama), and speaks back using Qwen3-TTS, all while displaying a real-time animated 3D avatar floating on your screen with a transparent background.
 
 ## Features
 
 - **Transparent Overlay**: Avatar floats on your screen with no background, always visible in the corner
 - **Custom 3D Avatars**: Load high-quality GLB/glTF/VRM models from Ready Player Me, VRoid Hub, Mixamo, and more
 - **Real-time Animation**: Idle breathing, lip-sync during speech, blinking, and gesture animations
-- **Push-to-Talk Voice Interaction**: Press a key to speak, get spoken responses with lip-synced animation
+- **Continuous Voice Interaction**: Press T to start, then just keep talking - no need to press again
 - **Local AI**: Uses Ollama for privacy-focused local LLM inference
-- **Context Management**: Automatic context reset after 30 seconds of inactivity
+- **Context Management**: Automatic context reset after 30 seconds of silence
+- **High-Quality TTS**: Qwen3-TTS provides natural, expressive speech synthesis
 
 ## Prerequisites
 
@@ -51,7 +52,7 @@ CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a
 
 ## Controls
 
-*   **T**: Push-to-talk - press to start recording your voice (5 second recording window)
+*   **T**: Start conversation - press once to begin, then just keep talking
 *   **Esc**: Quit the application
 *   **R**: Toggle camera auto-rotation
 *   **Space**: Toggle speaking animation (for testing)
@@ -61,11 +62,12 @@ CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a
 ## How It Works
 
 1. **Model Rendering**: The 3D avatar is rendered with a transparent background, floating on your screen
-2. **Push-to-Talk**: Press **T** to start recording. Speak your message within 5 seconds
+2. **Start Conversation**: Press **T** once to begin the conversation
 3. **Speech-to-Text**: Your voice is transcribed using faster-whisper (Whisper large-v3-turbo)
 4. **LLM Response**: The transcribed text is sent to Ollama for a response
-5. **Text-to-Speech**: The response is spoken using Kokoro TTS with phoneme-based lip-sync
-6. **Context Reset**: If you don't speak for 30 seconds, the conversation context resets automatically
+5. **Text-to-Speech**: The response is spoken using Qwen3-TTS with phoneme-based lip-sync
+6. **Auto-Listen**: After speaking, the assistant automatically listens for your next message
+7. **Context Reset**: If you don't speak for 30 seconds, the conversation context resets and waits for T
 
 ## Custom Avatars
 
