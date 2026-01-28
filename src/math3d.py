@@ -402,10 +402,43 @@ class Transform:
     def to_matrix(self) -> Mat4:
         """Get the combined transformation matrix."""
         if self._matrix_dirty:
-            t = Mat4.translation(self.position.x, self.position.y, self.position.z)
-            r = Mat4.from_quaternion(self.rotation)
-            s = Mat4.scale(self.scale_factor.x, self.scale_factor.y, self.scale_factor.z)
-            self._cached_matrix = t @ r @ s
+            # Direct matrix construction: T * R * S
+            # This avoids creating 3 intermediate matrices and 2 multiplications
+
+            # 1. Rotation (from quaternion)
+            q = self.rotation
+            w, x, y, z = q.w, q.x, q.y, q.z
+            xx, yy, zz = x * x, y * y, z * z
+            xy, xz, yz = x * y, x * z, y * z
+            wx, wy, wz = w * x, w * y, w * z
+
+            # 2. Scale
+            sx, sy, sz = self.scale_factor.x, self.scale_factor.y, self.scale_factor.z
+
+            # 3. Combine Rotation and Scale
+            # R columns scaled by S
+            r00 = (1.0 - 2.0 * (yy + zz)) * sx
+            r01 = (2.0 * (xy - wz)) * sy
+            r02 = (2.0 * (xz + wy)) * sz
+
+            r10 = (2.0 * (xy + wz)) * sx
+            r11 = (1.0 - 2.0 * (xx + zz)) * sy
+            r12 = (2.0 * (yz - wx)) * sz
+
+            r20 = (2.0 * (xz - wy)) * sx
+            r21 = (2.0 * (yz + wx)) * sy
+            r22 = (1.0 - 2.0 * (xx + yy)) * sz
+
+            # 4. Translation
+            tx, ty, tz = self.position.x, self.position.y, self.position.z
+
+            self._cached_matrix = Mat4(np.array([
+                [r00, r01, r02, tx],
+                [r10, r11, r12, ty],
+                [r20, r21, r22, tz],
+                [0.0, 0.0, 0.0, 1.0]
+            ], dtype=np.float32))
+
             self._matrix_dirty = False
         return self._cached_matrix
 
