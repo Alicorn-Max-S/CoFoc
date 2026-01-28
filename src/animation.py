@@ -5,6 +5,7 @@ Provides bones, skeleton, animation clips, and animation blending.
 """
 
 import math
+from bisect import bisect_right
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from math3d import Vec3, Quaternion, Mat4, Transform, lerp
@@ -50,15 +51,13 @@ class BoneAnimation:
             return kf.position, kf.rotation, kf.scale
 
         # Find surrounding keyframes
-        prev_kf = self.keyframes[0]
-        next_kf = self.keyframes[-1]
+        # Binary search for O(log N) performance
+        idx = bisect_right(self.keyframes, time, key=lambda k: k.time)
+        prev_idx = max(0, idx - 1)
+        next_idx = min(len(self.keyframes) - 1, idx)
 
-        for i, kf in enumerate(self.keyframes):
-            if kf.time <= time:
-                prev_kf = kf
-            if kf.time >= time and i > 0:
-                next_kf = kf
-                break
+        prev_kf = self.keyframes[prev_idx]
+        next_kf = self.keyframes[next_idx]
 
         if prev_kf.time == next_kf.time:
             return prev_kf.position, prev_kf.rotation, prev_kf.scale
