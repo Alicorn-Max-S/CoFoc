@@ -27,6 +27,7 @@ except ImportError:
 from math3d import Vec3, Mat4, Quaternion, radians
 from shaders import Shader, create_avatar_shader
 from geometry import Mesh
+from lipsync import get_lip_sync_engine, VisemeShape
 
 
 # Check if we have an external model to load
@@ -99,17 +100,30 @@ class ExternalAvatarRenderer:
         self.is_speaking = speaking
 
     def update(self, delta_time: float) -> None:
-        """Update animations."""
+        """Update animations with phoneme-based lip sync."""
         if not self.model_loaded:
             return
 
-        # Update mouth animation
-        if self.is_speaking:
+        # Get lip sync engine for phoneme-based mouth animation
+        lip_sync = get_lip_sync_engine()
+
+        # Update mouth animation from lip sync engine
+        if lip_sync.is_playing:
+            # Get current viseme shape from phoneme timeline
+            viseme_shape, _ = lip_sync.get_current_viseme()
+            # Use the viseme's mouth openness
+            self.mouth_blend = viseme_shape.to_simple()
+            # Store full viseme for detailed animation
+            self._current_viseme = viseme_shape
+        elif self.is_speaking:
+            # Fallback to simple animation if lip sync not available
             import random
             target = random.uniform(0.3, 1.0)
             self.mouth_blend += (target - self.mouth_blend) * 10 * delta_time
+            self._current_viseme = None
         else:
             self.mouth_blend += (0.0 - self.mouth_blend) * 5 * delta_time
+            self._current_viseme = None
 
         # Update blinking
         self.blink_timer += delta_time
@@ -130,7 +144,7 @@ class ExternalAvatarRenderer:
             self.skeleton.update()
 
     def _apply_procedural_animation(self, delta_time: float) -> None:
-        """Apply procedural idle and speaking animations."""
+        """Apply procedural idle and speaking animations with phoneme-based lip sync."""
         if not self.skeleton:
             return
 
@@ -139,13 +153,15 @@ class ExternalAvatarRenderer:
         # Breathing
         breath = math.sin(t * 1.5) * 0.5 + 0.5
 
-        # Head movement
+        # Head movement - more dynamic when speaking
         head = self.skeleton.get_bone("Head") or self.skeleton.get_bone("head")
         if head:
             nod = math.sin(t * 0.8) * 0.02
             tilt = math.sin(t * 0.5) * 0.015
             if self.is_speaking:
-                nod += math.sin(t * 4) * 0.03
+                # More expressive head movement when speaking
+                nod += math.sin(t * 3) * 0.04
+                tilt += math.sin(t * 2.5) * 0.02
             head.local_transform.rotation = Quaternion.from_euler(nod, tilt, 0)
 
         # Spine breathing
@@ -153,10 +169,22 @@ class ExternalAvatarRenderer:
         if spine:
             spine.local_transform.scale_factor = Vec3(1.0, 1.0 + breath * 0.01, 1.0 + breath * 0.015)
 
-        # Jaw/mouth for speaking
+        # Jaw/mouth animation using viseme data
         jaw = self.skeleton.get_bone("Jaw") or self.skeleton.get_bone("jaw")
         if jaw:
-            jaw.local_transform.rotation = Quaternion.from_euler(self.mouth_blend * 0.2, 0, 0)
+            viseme = getattr(self, '_current_viseme', None)
+            if viseme and isinstance(viseme, VisemeShape):
+                # Use detailed viseme shape for jaw animation
+                # jaw_open controls vertical opening
+                jaw_rotation = viseme.jaw_open * 0.25  # Max ~15 degrees
+                jaw.local_transform.rotation = Quaternion.from_euler(jaw_rotation, 0, 0)
+            else:
+                # Fallback to simple mouth blend
+                jaw.local_transform.rotation = Quaternion.from_euler(self.mouth_blend * 0.2, 0, 0)
+
+        # Lip pucker for rounded vowels (if model supports it)
+        # This would require blend shapes which glTF models may have
+        # For now, we can at least adjust the jaw differently for different sounds
 
     def get_bone_matrices(self) -> Optional[List[Mat4]]:
         """Get bone matrices for GPU skinning."""

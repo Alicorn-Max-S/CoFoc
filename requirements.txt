@@ -3,6 +3,7 @@ PyOpenGL
 PyOpenGL-accelerate
 pygltflib
 Pillow
+g2p-en
 
 torch
 transformers

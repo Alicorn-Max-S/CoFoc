@@ -11,6 +11,8 @@ import time
 import io
 import librosa
 
+from lipsync import get_lip_sync_engine
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AudioEngine")
@@ -86,7 +88,7 @@ class AudioEngine:
 
     def speak(self, text, avatar_callback=None):
         """
-        Converts text to speech and plays it.
+        Converts text to speech and plays it with phoneme-based lip sync.
         avatar_callback: function(is_talking: bool)
         """
         if not text:
@@ -94,10 +96,13 @@ class AudioEngine:
 
         self.is_speaking = True
         logger.info(f"Speaking: {text}")
-        
+
+        # Get lip sync engine
+        lip_sync = get_lip_sync_engine()
+
         try:
             inputs = self.processor(text=text, return_tensors="pt").to(self.device)
-            
+
             if self.use_fallback_tts:
                 speech = self.tts_model.generate_speech(inputs["input_ids"], self.speaker_embeddings, vocoder=self.vocoder)
             else:
@@ -106,20 +111,29 @@ class AudioEngine:
 
             # Move to CPU and numpy
             speech_np = speech.cpu().numpy()
-            
-            # Notify avatar to start moving mouth
+
+            # Calculate audio duration
+            sample_rate = 16000
+            audio_duration = len(speech_np) / sample_rate
+
+            # Start phoneme-based lip sync BEFORE playing audio
+            lip_sync.start_playback(text, audio_duration)
+            logger.info(f"Lip sync started for {audio_duration:.2f}s")
+
+            # Notify avatar that speaking has started
             if avatar_callback:
                 avatar_callback(True)
-            
+
             # Play audio
-            # SpeechT5 is usually 16kHz, check model config in real usage
-            sample_rate = 16000 
             sd.play(speech_np, samplerate=sample_rate)
             sd.wait()
-            
+
         except Exception as e:
             logger.error(f"TTS Error: {e}")
         finally:
+            # Stop lip sync
+            lip_sync.stop_playback()
+
             if avatar_callback:
                 avatar_callback(False)
             self.is_speaking = False

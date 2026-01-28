@@ -406,7 +406,7 @@ def create_wave_animation() -> AnimationClip:
 
 
 class ProceduralAnimator:
-    """Procedural animation layer for dynamic effects."""
+    """Procedural animation layer for dynamic effects with phoneme-based lip sync."""
 
     def __init__(self, skeleton: Skeleton):
         self.skeleton = skeleton
@@ -415,6 +415,7 @@ class ProceduralAnimator:
         # Mouth animation state
         self.mouth_openness = 0.0
         self.target_mouth_openness = 0.0
+        self.is_speaking = False
 
         # Blink state
         self.blink_timer = 0.0
@@ -430,21 +431,41 @@ class ProceduralAnimator:
         # Breathing
         self.breathing_phase = 0.0
 
+        # Lip sync engine reference (lazy loaded)
+        self._lip_sync = None
+
+    def _get_lip_sync(self):
+        """Get the lip sync engine (lazy load to avoid circular imports)."""
+        if self._lip_sync is None:
+            try:
+                from lipsync import get_lip_sync_engine
+                self._lip_sync = get_lip_sync_engine()
+            except ImportError:
+                pass
+        return self._lip_sync
+
     def set_speaking(self, speaking: bool) -> None:
         """Set whether the avatar is speaking."""
-        if speaking:
-            # Random mouth movement when speaking
-            import random
-            self.target_mouth_openness = random.uniform(0.3, 1.0)
-        else:
+        self.is_speaking = speaking
+        if not speaking:
             self.target_mouth_openness = 0.0
 
     def update(self, delta_time: float) -> None:
-        """Update procedural animations."""
+        """Update procedural animations with phoneme-based lip sync."""
         self.time += delta_time
 
-        # Update mouth
-        self.mouth_openness += (self.target_mouth_openness - self.mouth_openness) * 10 * delta_time
+        # Update mouth using lip sync engine if available
+        lip_sync = self._get_lip_sync()
+        if lip_sync and lip_sync.is_playing:
+            # Get viseme-based mouth openness from phoneme timeline
+            self.mouth_openness = lip_sync.get_simple_mouth_open()
+        elif self.is_speaking:
+            # Fallback: random mouth movement when speaking
+            import random
+            self.target_mouth_openness = random.uniform(0.3, 1.0)
+            self.mouth_openness += (self.target_mouth_openness - self.mouth_openness) * 10 * delta_time
+        else:
+            self.mouth_openness += (0.0 - self.mouth_openness) * 10 * delta_time
 
         # Update blinking
         self.blink_timer += delta_time
