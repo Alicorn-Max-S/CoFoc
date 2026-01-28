@@ -277,6 +277,7 @@ class LipSyncEngine:
         self._events: List[PhonemeEvent] = []
         self._start_time: float = 0.0
         self._is_playing: bool = False
+        self._last_event_index: int = 0
         self._lock = threading.Lock()
 
     def text_to_phonemes(self, text: str) -> List[str]:
@@ -410,12 +411,14 @@ class LipSyncEngine:
             self._events = self.create_phoneme_timeline(text, duration)
             self._start_time = time.time()
             self._is_playing = True
+            self._last_event_index = 0
 
     def stop_playback(self) -> None:
         """Stop lip sync playback."""
         with self._lock:
             self._is_playing = False
             self._events = []
+            self._last_event_index = 0
 
     def get_current_viseme(self) -> Tuple[VisemeShape, float]:
         """
@@ -426,7 +429,8 @@ class LipSyncEngine:
             indicates transition progress (0-1).
         """
         with self._lock:
-            if not self._is_playing or not self._events:
+            events = self._events
+            if not self._is_playing or not events:
                 return VISEME_SHAPES[Viseme.SIL], 0.0
 
             elapsed = time.time() - self._start_time
@@ -435,16 +439,32 @@ class LipSyncEngine:
             current_event = None
             next_event = None
 
-            for i, event in enumerate(self._events):
+            # Reset index if out of bounds or if time went backwards
+            if self._last_event_index >= len(events):
+                self._last_event_index = 0
+            elif self._last_event_index > 0:
+                # Check if we need to rewind (elapsed is before our last known position)
+                if elapsed < events[self._last_event_index].start_time:
+                    self._last_event_index = 0
+
+            # Search starting from last known index
+            for i in range(self._last_event_index, len(events)):
+                event = events[i]
                 if event.start_time <= elapsed < event.end_time:
                     current_event = event
-                    if i + 1 < len(self._events):
-                        next_event = self._events[i + 1]
+                    self._last_event_index = i
+                    if i + 1 < len(events):
+                        next_event = events[i + 1]
+                    break
+
+                # Optimization: events are sorted by time.
+                # If we encounter an event starting in the future, we've gone too far.
+                if elapsed < event.start_time:
                     break
 
             if current_event is None:
                 # Past the end or before start
-                if elapsed >= self._events[-1].end_time:
+                if elapsed >= events[-1].end_time:
                     self._is_playing = False
                 return VISEME_SHAPES[Viseme.SIL], 0.0
 
