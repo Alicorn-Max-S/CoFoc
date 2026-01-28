@@ -9,6 +9,11 @@ class Brain:
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger("Brain")
 
+    def reset_context(self):
+        """Reset the conversation history/context."""
+        self.history = []
+        self.logger.info("Conversation context has been reset")
+
     def think(self, user_input):
         """Sends user input to Ollama and gets a response."""
         self.logger.info(f"Thinking about: {user_input}")

@@ -1,14 +1,15 @@
 # CoFoc
 
-CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a local LLM (Ollama), and speaks back using the Qwen-3 TTS model, all while displaying a real-time animated 3D avatar floating on your screen with a transparent background.
+CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a local LLM (Ollama), and speaks back using Kokoro TTS, all while displaying a real-time animated 3D avatar floating on your screen with a transparent background.
 
 ## Features
 
 - **Transparent Overlay**: Avatar floats on your screen with no background, always visible in the corner
 - **Custom 3D Avatars**: Load high-quality GLB/glTF/VRM models from Ready Player Me, VRoid Hub, Mixamo, and more
 - **Real-time Animation**: Idle breathing, lip-sync during speech, blinking, and gesture animations
-- **Voice Interaction**: Speak naturally and get spoken responses
+- **Push-to-Talk Voice Interaction**: Press a key to speak, get spoken responses with lip-synced animation
 - **Local AI**: Uses Ollama for privacy-focused local LLM inference
+- **Context Management**: Automatic context reset after 30 seconds of inactivity
 
 ## Prerequisites
 
@@ -50,11 +51,21 @@ CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a
 
 ## Controls
 
+*   **T**: Push-to-talk - press to start recording your voice (5 second recording window)
 *   **Esc**: Quit the application
 *   **R**: Toggle camera auto-rotation
 *   **Space**: Toggle speaking animation (for testing)
 *   **C**: Toggle click-through mode (allow/block mouse clicks)
 *   **Drag**: Move the avatar window (when click-through is disabled)
+
+## How It Works
+
+1. **Model Rendering**: The 3D avatar is rendered with a transparent background, floating on your screen
+2. **Push-to-Talk**: Press **T** to start recording. Speak your message within 5 seconds
+3. **Speech-to-Text**: Your voice is transcribed using faster-whisper (Whisper large-v3-turbo)
+4. **LLM Response**: The transcribed text is sent to Ollama for a response
+5. **Text-to-Speech**: The response is spoken using Kokoro TTS with phoneme-based lip-sync
+6. **Context Reset**: If you don't speak for 30 seconds, the conversation context resets automatically
 
 ## Custom Avatars
 
@@ -64,6 +75,123 @@ CoFoc supports loading high-quality 3D avatar models. Place your model in the `m
 - **GLB** (recommended) - Binary glTF 2.0
 - **glTF** - JSON + separate binary files
 - **VRM** - VTuber standard format (based on glTF)
+
+### Model Requirements for Lip-Sync
+
+For the best lip-sync animation experience, your model should have:
+
+1. **Skeletal Rig**: A proper bone hierarchy with at minimum:
+   - `Head` or `head` bone (for head movement during speech)
+   - `Spine` or `spine` bone (for breathing animation)
+   - `Jaw` or `jaw` bone (for mouth movement - **most important for lip-sync**)
+
+2. **Recommended Bone Structure**:
+   ```
+   Root
+   └── Hips
+       └── Spine
+           └── Chest
+               └── Neck
+                   └── Head
+                       └── Jaw (for lip-sync)
+   ```
+
+3. **File Size**: Models under 50MB load fastest. Very detailed models may cause initial lag.
+
+### Recommended Models
+
+Here are specific model recommendations that work well with CoFoc:
+
+#### Best for Beginners: Ready Player Me
+- **Why**: Automatically includes proper rig with jaw bone
+- **Style**: Semi-realistic, customizable
+- **Cost**: Free
+- **Direct Link**: [readyplayer.me/avatar](https://readyplayer.me/avatar)
+
+**Step-by-step**:
+1. Visit readyplayer.me/avatar
+2. Create and customize your avatar
+3. Click "Next" and then copy the avatar URL (e.g., `https://models.readyplayer.me/6185a4acfb622cf1cdc49348.glb`)
+4. Download using the utility:
+   ```bash
+   python src/download_avatar.py --source readyplayer --id 6185a4acfb622cf1cdc49348
+   ```
+5. Or download the GLB directly and save as `models/avatar.glb`
+
+#### Best for Anime Style: VRoid Hub
+- **Why**: VRM format designed for VTubing with proper lip-sync support
+- **Style**: Anime/VTuber
+- **Cost**: Free (check individual licenses)
+- **Direct Link**: [hub.vroid.com](https://hub.vroid.com)
+
+**Recommended models from VRoid Hub**:
+- Search for "free download" + "full body"
+- Look for models with "commercial use OK" or "modification OK" licenses
+- Popular creators: Pikamee, Ina, or search for "original character"
+
+**Step-by-step**:
+1. Browse hub.vroid.com and find a model you like
+2. Check the usage terms (許諾範囲)
+3. Click download to get the VRM file
+4. Move to `models/avatar.vrm`
+5. Run: `python src/main.py --model models/avatar.vrm`
+
+#### Best for Realistic Style: Mixamo + Blender
+- **Why**: High-quality rigged characters
+- **Style**: Realistic, game-ready
+- **Cost**: Free
+- **Direct Link**: [mixamo.com](https://www.mixamo.com)
+
+**Step-by-step**:
+1. Create a free Adobe account and visit mixamo.com
+2. Go to "Characters" tab
+3. Select a character (e.g., "Kachujin", "X Bot", "Y Bot")
+4. Click Download → Format: FBX → Download
+5. Open Blender and import the FBX: File → Import → FBX
+6. Export as glTF: File → Export → glTF 2.0 → Check "Export Deformation Bones Only"
+7. Save as `models/avatar.glb`
+
+#### Best for VTubing: VRoid Studio (Create Your Own)
+- **Why**: Full customization, export directly to VRM
+- **Style**: Anime
+- **Cost**: Free
+- **Direct Link**: [vroid.com/en/studio](https://vroid.com/en/studio)
+
+**Step-by-step**:
+1. Download and install VRoid Studio
+2. Create your character (face, hair, body, clothes)
+3. Go to "Export" in the top menu
+4. Choose "Export as VRM"
+5. Save to `models/avatar.vrm`
+
+### Quick Import Guide
+
+```bash
+# Method 1: Use the download utility
+python src/download_avatar.py --info  # See all options
+
+# Method 2: Ready Player Me (easiest)
+python src/download_avatar.py --source readyplayer --id YOUR_AVATAR_ID
+
+# Method 3: Direct URL download
+python src/download_avatar.py --url https://example.com/model.glb
+
+# Method 4: Manual placement
+# Simply copy your GLB/VRM file to: models/avatar.glb
+
+# Run with custom model
+python src/main.py --model path/to/your/model.glb
+```
+
+### Troubleshooting Models
+
+| Issue | Solution |
+|-------|----------|
+| Model not showing | Verify the file is valid GLB/glTF/VRM with a 3D viewer like [gltf-viewer.donmccurdy.com](https://gltf-viewer.donmccurdy.com/) |
+| Lip-sync not working | Model needs a "Jaw" or "jaw" bone in the skeleton |
+| Model appears too small/large | Model scale is auto-detected; if issues persist, rescale in Blender |
+| Model appears dark | Check that the model has proper materials/textures |
+| T-pose stuck | Model needs a valid skeleton; try a different source |
 
 ### Avatar Sources
 

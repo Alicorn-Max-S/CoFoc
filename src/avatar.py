@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, List, Tuple
 
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QSurfaceFormat
 
 try:
@@ -410,6 +410,9 @@ class AvatarWidget(QWidget):
     floating over other windows.
     """
 
+    # Signal emitted when user presses the talk key (T)
+    talk_requested = pyqtSignal()
+
     def __init__(self, model_path: Optional[str] = None):
         super().__init__()
 
@@ -487,6 +490,9 @@ class AvatarWidget(QWidget):
         elif event.key() == Qt.Key.Key_C:
             # Toggle click-through
             self.set_click_through(not self._click_through)
+        elif event.key() == Qt.Key.Key_T:
+            # Push-to-talk: emit signal to start listening
+            self.talk_requested.emit()
         super().keyPressEvent(event)
 
     def mousePressEvent(self, event) -> None:
