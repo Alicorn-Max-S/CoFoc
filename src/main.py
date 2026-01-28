@@ -1,10 +1,12 @@
 import sys
+import argparse
 import threading
 import time
+from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
-from avatar import AvatarWidget
+from avatar import AvatarWidget, configure_opengl_format
 from brain import Brain
 from audio_engine import AudioEngine
 
@@ -65,25 +67,49 @@ class AssistantWorker(QThread):
         self.wait()
 
 def main():
-    app = QApplication(sys.argv)
-    
-    # Create Avatar Window
-    avatar = AvatarWidget()
-    avatar.show()
-    
-    # Create Signals
-    signals = AssistantSignals()
-    signals.set_speaking.connect(avatar.set_speaking)
-    signals.update_status.connect(lambda s: print(f"[System]: {s}"))
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="CoFoc - 3D AI Assistant")
+    parser.add_argument('--model', '-m', type=str, default=None,
+                        help='Path to a GLB/glTF/VRM avatar model')
+    parser.add_argument('--no-ai', action='store_true',
+                        help='Run avatar only without AI/audio (for testing)')
+    args = parser.parse_args()
 
-    # Start Worker Thread
-    worker = AssistantWorker(signals)
-    worker.start()
+    # Configure OpenGL format before creating QApplication
+    configure_opengl_format()
+
+    app = QApplication(sys.argv)
+
+    # Create 3D Avatar Window with optional custom model
+    avatar = AvatarWidget(model_path=args.model)
+    avatar.show()
+
+    # Disable click-through so user can interact
+    avatar.set_click_through(False)
     
-    try:
+    if args.no_ai:
+        # Run in test mode without AI
+        print("[System]: Running in test mode (no AI)")
+        print("[System]: Press Space to toggle speaking animation")
+        print("[System]: Press R to toggle camera rotation")
+        print("[System]: Press C to toggle click-through mode")
+        print("[System]: Press Esc to quit")
+
         sys.exit(app.exec())
-    except KeyboardInterrupt:
-        worker.stop()
+    else:
+        # Create Signals
+        signals = AssistantSignals()
+        signals.set_speaking.connect(avatar.set_speaking)
+        signals.update_status.connect(lambda s: print(f"[System]: {s}"))
+
+        # Start Worker Thread
+        worker = AssistantWorker(signals)
+        worker.start()
+
+        try:
+            sys.exit(app.exec())
+        except KeyboardInterrupt:
+            worker.stop()
 
 if __name__ == "__main__":
     main()
