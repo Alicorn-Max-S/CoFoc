@@ -71,45 +71,61 @@ def main():
     parser = argparse.ArgumentParser(description="CoFoc - 3D AI Assistant")
     parser.add_argument('--model', '-m', type=str, default=None,
                         help='Path to a GLB/glTF/VRM avatar model')
-    parser.add_argument('--no-ai', action='store_true',
-                        help='Run avatar only without AI/audio (for testing)')
     args = parser.parse_args()
+
+    # Resolve avatar model path
+    model_path = args.model
+    if model_path is None:
+        # Check for default avatar in models/ directory
+        default_path = Path(__file__).parent.parent / "models" / "avatar.glb"
+        if default_path.exists():
+            model_path = str(default_path)
+        else:
+            print("[Error]: No avatar model found!")
+            print()
+            print("An avatar model is required to run CoFoc.")
+            print("Please provide one using --model or place it at models/avatar.glb")
+            print()
+            print("Recommended free avatar sources:")
+            print("  1. Ready Player Me  - https://readyplayer.me/avatar")
+            print("     Create a free avatar and download as GLB")
+            print("  2. VRoid Hub         - https://hub.vroid.com")
+            print("     Browse free VRM models")
+            print("  3. Download utility:")
+            print("     python src/download_avatar.py --source readyplayer --id YOUR_ID")
+            print()
+            print("See README.md for more avatar sources and details.")
+            sys.exit(1)
+
+    if not Path(model_path).exists():
+        print(f"[Error]: Avatar model not found at: {model_path}")
+        sys.exit(1)
 
     # Configure OpenGL format before creating QApplication
     configure_opengl_format()
 
     app = QApplication(sys.argv)
 
-    # Create 3D Avatar Window with optional custom model
-    avatar = AvatarWidget(model_path=args.model)
+    # Create 3D Avatar Window with required model
+    avatar = AvatarWidget(model_path=model_path)
     avatar.show()
 
     # Disable click-through so user can interact
     avatar.set_click_through(False)
-    
-    if args.no_ai:
-        # Run in test mode without AI
-        print("[System]: Running in test mode (no AI)")
-        print("[System]: Press Space to toggle speaking animation")
-        print("[System]: Press R to toggle camera rotation")
-        print("[System]: Press C to toggle click-through mode")
-        print("[System]: Press Esc to quit")
 
+    # Create Signals
+    signals = AssistantSignals()
+    signals.set_speaking.connect(avatar.set_speaking)
+    signals.update_status.connect(lambda s: print(f"[System]: {s}"))
+
+    # Start Worker Thread
+    worker = AssistantWorker(signals)
+    worker.start()
+
+    try:
         sys.exit(app.exec())
-    else:
-        # Create Signals
-        signals = AssistantSignals()
-        signals.set_speaking.connect(avatar.set_speaking)
-        signals.update_status.connect(lambda s: print(f"[System]: {s}"))
-
-        # Start Worker Thread
-        worker = AssistantWorker(signals)
-        worker.start()
-
-        try:
-            sys.exit(app.exec())
-        except KeyboardInterrupt:
-            worker.stop()
+    except KeyboardInterrupt:
+        worker.stop()
 
 if __name__ == "__main__":
     main()

@@ -1,11 +1,12 @@
 # CoFoc
 
-CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a local LLM (Ollama), and speaks back using the Qwen-3 TTS model, all while displaying a real-time animated 3D avatar floating on your screen with a transparent background.
+CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a local LLM (Ollama), and speaks back using **Qwen3 TTS** (`Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice`), all while displaying a real-time animated 3D avatar floating on your screen with a transparent background.
 
 ## Features
 
 - **Transparent Overlay**: Avatar floats on your screen with no background, always visible in the corner
-- **Custom 3D Avatars**: Load high-quality GLB/glTF/VRM models from Ready Player Me, VRoid Hub, Mixamo, and more
+- **3D Avatar (Required)**: Load GLB/glTF/VRM models from Ready Player Me, VRoid Hub, Mixamo, and more
+- **Qwen3 TTS**: High-quality multilingual speech synthesis with customizable voices
 - **Real-time Animation**: Idle breathing, lip-sync during speech, blinking, and gesture animations
 - **Voice Interaction**: Speak naturally and get spoken responses
 - **Local AI**: Uses Ollama for privacy-focused local LLM inference
@@ -18,7 +19,9 @@ CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a
 
 2.  **Python 3.10+**: Ensure you have a capable Python environment.
 
-3.  **Hardware**: NVIDIA GPU recommended for the TTS and STT models (CUDA).
+3.  **Hardware**: NVIDIA GPU recommended for faster inference (CUDA). CPU-only works with the 0.6B model (~21GB+ RAM recommended).
+
+4.  **Avatar Model (Required)**: A GLB, glTF, or VRM avatar model file is required. See [Custom Avatars](#custom-avatars) below for free sources.
 
 ## Setup
 
@@ -26,15 +29,25 @@ CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a
 
     ```bash
     pip install -r requirements.txt
-
     ```
 
-2.  (Optional) Download a custom avatar:
+    For GPU users, optionally install FlashAttention 2 for faster Qwen3 TTS inference:
+
+    ```bash
+    pip install -U flash-attn --no-build-isolation
+    ```
+
+2.  Download an avatar model (required):
 
     ```bash
     # See avatar sources below
     python src/download_avatar.py --info
+
+    # Example: download from Ready Player Me
+    python src/download_avatar.py --source readyplayer --id YOUR_AVATAR_ID
     ```
+
+    Or download manually and place as `models/avatar.glb`.
 
 3.  Run the application:
 
@@ -42,23 +55,16 @@ CoFoc is a fully interactive 3D AI assistant that listens to you, thinks using a
     python src/main.py
     ```
 
-    Or with a custom model:
+    Or with a specific model path:
 
     ```bash
-    python src/main.py --model models/avatar.glb
-    ```
-
-    Or in test mode (no AI, just avatar):
-
-    ```bash
-    python src/main.py --no-ai
+    python src/main.py --model /path/to/your/avatar.glb
     ```
 
 ## Controls
 
 - **Esc**: Quit the application
 - **R**: Toggle camera auto-rotation
-- **Space**: Toggle speaking animation (for testing)
 - **C**: Toggle click-through mode (allow/block mouse clicks)
 - **Drag**: Move the avatar window (when click-through is disabled)
 
@@ -165,7 +171,7 @@ CoFoc/
 │   ├── shaders.py       # GLSL shader programs
 │   ├── math3d.py        # 3D math utilities
 │   ├── brain.py         # LLM interface (Ollama)
-│   └── audio_engine.py  # Speech recognition and synthesis
+│   └── audio_engine.py  # Speech recognition (faster-whisper) and synthesis (Qwen3 TTS)
 ├── requirements.txt
 └── README.md
 ```
@@ -190,6 +196,7 @@ CoFoc/
 
 ## Credits
 
+- [Qwen3 TTS](https://github.com/QwenLM/Qwen3-TTS) - Text-to-speech by Alibaba Cloud Qwen team
 - [Ready Player Me](https://readyplayer.me) - Avatar creation platform
 - [VRoid Hub](https://hub.vroid.com) - VRM model community
 - [Mixamo](https://mixamo.com) - Character animations

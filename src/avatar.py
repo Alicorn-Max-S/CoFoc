@@ -271,7 +271,7 @@ class Avatar3DWidget(QOpenGLWidget):
             print(f"Shader compilation error: {e}")
             return
 
-        # Try to load external model
+        # Load the avatar model (required)
         self.external_renderer = ExternalAvatarRenderer()
 
         model_loaded = False
@@ -280,14 +280,9 @@ class Avatar3DWidget(QOpenGLWidget):
         elif DEFAULT_MODEL_PATH.exists():
             model_loaded = self.external_renderer.load_model(str(DEFAULT_MODEL_PATH))
 
-        # If no external model, use procedural fallback
         if not model_loaded:
-            print("No external model found, using procedural avatar")
-            try:
-                from avatar_model import HumanoidAvatar
-                self.fallback_avatar = HumanoidAvatar()
-            except Exception as e:
-                print(f"Failed to create fallback avatar: {e}")
+            print("ERROR: No avatar model could be loaded.")
+            print("Please provide a GLB/glTF/VRM model via --model or place it at models/avatar.glb")
 
     def resizeGL(self, width: int, height: int) -> None:
         """Handle widget resize."""
