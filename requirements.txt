@@ -23,5 +23,5 @@ termcolor
 faster-whisper
 
 # Fast TTS - 82M params, high quality
-kokoro>=0.9
+kokoro>=0.7.16
 misaki[en]
